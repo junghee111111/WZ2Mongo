@@ -1,0 +1,8 @@
+node_modules/
+dist/
+build/
+*.js
+*.d.ts
+docker-compose.yml
+init-mongo.js
+.env*
