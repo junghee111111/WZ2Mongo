@@ -103,9 +103,9 @@ export class WZToMongoConverter {
             // 두번 루프 돌려야댐!!
             if (typeof item === 'object' && item !== null) {
               const document = this.convertWZItemToDocument(
-                id,
+                key,
                 value as WZDataItem,
-                `${fileName}/${key}`
+                `${fileName}/${id}`
               );
               documents.push(document);
             }
