@@ -194,4 +194,147 @@ export class WZToMongoConverter {
       console.log(`${collectionInfo.name}: ${count}개 문서`);
     }
   }
+
+  async processCharacterJsonFile(): Promise<void> {
+    try {
+      const characterDirectory = process.env.CHARACTER_JSON_DIRECTORY || './character.wz';
+
+      console.log(`캐릭터 JSON 디렉터리 처리 중: ${characterDirectory}`);
+
+      // 디렉터리가 존재하는지 확인
+      if (!(await fs.pathExists(characterDirectory))) {
+        console.log(`디렉터리가 존재하지 않습니다: ${characterDirectory}`);
+        return;
+      }
+
+      const files = await fs.readdir(characterDirectory);
+      const jsonFiles = files.filter(file => file.endsWith('.json'));
+
+      console.log(`총 ${jsonFiles.length}개의 JSON 파일을 찾았습니다.`);
+
+      for (const file of jsonFiles) {
+        const filePath = path.join(characterDirectory, file);
+        const pureFileName = Number(path.basename(file, '.img.json'));
+        console.log(`\n파일 처리 중: ${file}`);
+
+        try {
+          const fileData = await fs.readJson(filePath);
+          const keys = Object.keys(fileData);
+
+          if (keys.length === 0) {
+            console.log('빈 파일입니다.');
+            continue;
+          }
+
+          // keys 중에 "info"가 있는지 확인
+          if (keys.includes('info')) {
+            const infoObject = fileData.info;
+            if (typeof infoObject === 'object' && infoObject !== null) {
+              // info 안의 각 entry를 순회
+              const tmpInfo: Record<string, unknown> = {};
+              const result = await this.findItemById('items', pureFileName.toString());
+              if (!result) {
+                console.error(`아이템을 찾을 수 없습니다: ${pureFileName}`);
+                continue;
+              }
+              for (const [, entryValue] of Object.entries(infoObject)) {
+                if (typeof entryValue === 'object' && entryValue !== null) {
+                  const entryObj = entryValue as Record<string, unknown>;
+                  if (entryObj._value !== undefined) {
+                    tmpInfo[entryObj._dirName as string] = entryObj._value;
+                  }
+                }
+              }
+              // update mongodb
+              await this.db
+                ?.collection('items')
+                .updateOne({ id: pureFileName.toString() }, { $set: { info: tmpInfo } });
+              console.log(`아이템 ${pureFileName}의 info 업데이트 완료`);
+            }
+          } else {
+            // 파일 안에 여러개의 아이템이 들어있는 파일
+
+            console.log(
+              `파일 ${file}은 info 키가 없습니다. 여러 아이템이 포함된 파일로 처리합니다.`
+            );
+            for (const [key, value] of Object.entries(fileData)) {
+              const itemId = Number(key);
+              // value 객체의 하위 엔트리를 순회
+              if (typeof value === 'object' && value !== null) {
+                const item = value as Record<string, unknown>;
+                const tmpInfo: Record<string, unknown> = {};
+                const tmpMob: Record<string, unknown> = {};
+                const tmpSpec: Record<string, unknown> = {};
+                for (const [subKey, subValue] of Object.entries(item)) {
+                  // const subItemId = Number(subKey);
+                  // subValue에 대한 추가 처리 로직
+                  if (subKey === 'info' && typeof subValue === 'object' && subValue !== null) {
+                    // subValue가 object인 경우 엔트리를 순회
+                    const infoObject = subValue as Record<string, unknown>;
+                    for (const [infoKey, infoValue] of Object.entries(infoObject)) {
+                      if (typeof infoValue === 'object' && infoValue !== null) {
+                        const entryObj = infoValue as Record<string, unknown>;
+                        if (entryObj._value !== undefined) {
+                          tmpInfo[infoKey as string] = entryObj._value;
+                        }
+                      }
+                    }
+                  } else if (
+                    subKey === 'mob' &&
+                    typeof subValue === 'object' &&
+                    subValue !== null
+                  ) {
+                    // subValue가 mob인 경우 엔트리를 순회
+                    // 이 경우 각 엔트리의 id._value와 prob._value를 추출
+                    const mobObject = subValue as Record<string, unknown>;
+                    for (const [, mobValue] of Object.entries(mobObject)) {
+                      if (typeof mobValue === 'object' && mobValue !== null) {
+                        const mobEntry = mobValue as Record<string, unknown>;
+                        if (mobEntry.id && mobEntry.prob) {
+                          const idValue = (mobEntry.id as Record<string, unknown>)._value as number;
+                          const probValue = (mobEntry.prob as Record<string, unknown>)._value;
+                          tmpMob[idValue] = { id: idValue, prob: probValue };
+                        }
+                      }
+                    }
+                  } else if (
+                    subKey === 'spec' &&
+                    typeof subValue === 'object' &&
+                    subValue !== null
+                  ) {
+                    // subValue가 spec인 경우 엔트리를 순회
+                    // 이 경우 각 엔트리의 key, value 안의 _value를 추출
+                    const specObject = subValue as Record<string, unknown>;
+                    for (const [specKey, specValue] of Object.entries(specObject)) {
+                      if (typeof specValue === 'object' && specValue !== null) {
+                        const specEntry = specValue as Record<string, unknown>;
+                        if (specEntry._value !== undefined) {
+                          tmpSpec[specKey] = specEntry._value;
+                        }
+                      }
+                    }
+                  }
+                }
+                // update mongodb
+                await this.db
+                  ?.collection('items')
+                  .updateOne(
+                    { id: itemId.toString() },
+                    { $set: { info: tmpInfo, mob: tmpMob, spec: tmpSpec } }
+                  );
+                console.log(`아이템 ${itemId}의 info와 mob 업데이트 완료`);
+              }
+            }
+          }
+        } catch (fileError) {
+          console.error(`파일 처리 중 오류 발생 (${file}):`, fileError);
+        }
+      }
+
+      console.log('\n캐릭터 JSON 파일 처리가 완료되었습니다.');
+    } catch (error) {
+      console.error('캐릭터 JSON 파일 처리 중 오류 발생:', error);
+      throw error;
+    }
+  }
 }

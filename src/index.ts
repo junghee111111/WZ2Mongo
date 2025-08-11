@@ -20,19 +20,30 @@ async function main() {
     await converter.connect();
 
     // JSON 파일들이 있는 디렉토리 경로
-    const jsonDirectory = path.resolve(process.env.JSON_DIRECTORY || './string.wz');
-    console.log(`JSON 파일 경로: ${jsonDirectory}`);
+    const stringJsonDir = path.resolve(process.env.JSON_DIRECTORY || './string.wz');
+    console.log(`JSON 파일 경로: ${stringJsonDir}`);
 
     // 디렉토리 존재 확인
-    if (!(await fs.pathExists(jsonDirectory))) {
-      throw new Error(`JSON 디렉토리를 찾을 수 없습니다: ${jsonDirectory}`);
+    if (!(await fs.pathExists(stringJsonDir))) {
+      throw new Error(`JSON 디렉토리를 찾을 수 없습니다: ${stringJsonDir}`);
+    }
+
+    const characterJsonDir = path.resolve(process.env.CHARACTER_JSON_DIRECTORY || './character.wz');
+    console.log(`캐릭터 JSON 파일 경로: ${characterJsonDir}`);
+
+    // 캐릭터 디렉토리 존재 확인
+    if (!(await fs.pathExists(characterJsonDir))) {
+      throw new Error(`캐릭터 JSON 디렉토리를 찾을 수 없습니다: ${characterJsonDir}`);
     }
 
     // 모든 JSON 파일 처리
-    await converter.processAllJSONFiles(jsonDirectory);
+    // await converter.processAllJSONFiles(stringJsonDir);
+
+    // 캐릭터 JSON 파일 처리
+    await converter.processCharacterJsonFile();
 
     // 통계 정보 출력
-    await converter.getCollectionStats();
+    // await converter.getCollectionStats();
 
     // 예제 쿼리 실행
     console.log('\n=== 예제 쿼리 실행 ===');
