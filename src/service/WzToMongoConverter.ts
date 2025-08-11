@@ -1,30 +1,10 @@
 import * as fs from 'fs-extra';
-import * as path from 'path';
-import { MongoClient, Collection, Db } from 'mongodb';
-import * as dotenv from 'dotenv';
+import { Collection, Db, MongoClient } from 'mongodb';
+import path from 'path';
+import { MongoDocument } from '../interface/IMongoDocument';
+import { WZDataItem } from '../interface/IWZItem';
 
-// 환경 변수 로드
-dotenv.config();
-
-interface WZDataItem {
-  _dirName: string;
-  _dirType: string;
-  _value?: string;
-  name?: WZDataItem;
-  desc?: WZDataItem;
-  [key: string]: unknown;
-}
-
-interface MongoDocument {
-  id: string;
-  name?: string;
-  description?: string;
-  originalData: WZDataItem;
-  category: string;
-  createdAt: Date;
-}
-
-class WZToMongoConverter {
+export class WZToMongoConverter {
   private mongoUrl: string;
 
   private dbName: string;
@@ -81,7 +61,6 @@ class WZToMongoConverter {
     const document: MongoDocument = {
       id,
       category,
-      originalData: item,
       createdAt: new Date(),
     };
 
@@ -107,27 +86,45 @@ class WZToMongoConverter {
       console.log(`파일 처리 중: ${filePath}`);
 
       const fileData = await fs.readJson(filePath);
-      const fileName = path.basename(filePath, '.img.json');
-      const collectionName = fileName.toLowerCase();
+      let fileName = path.basename(filePath, '.img.target.json');
+      // 첫글자 upper case
+      fileName = fileName.charAt(0).toUpperCase() + fileName.slice(1);
+
+      const collectionName = 'items';
 
       const collection: Collection<MongoDocument> = this.db.collection(collectionName);
 
-      // 컬렉션 초기화 (선택적)
-      await collection.deleteMany({});
-      console.log(`컬렉션 ${collectionName} 초기화 완료`);
-
       const documents: MongoDocument[] = [];
 
-      for (const [id, item] of Object.entries(fileData)) {
-        if (typeof item === 'object' && item !== null) {
-          const document = this.convertWZItemToDocument(id, item as WZDataItem, fileName);
-          documents.push(document);
+      if (fileName === 'Eqp') {
+        // 장비템은 다르게 설정
+        for (const [id, item] of Object.entries(fileData[fileName])) {
+          for (const [key, value] of Object.entries(item)) {
+            // 두번 루프 돌려야댐!!
+            if (typeof item === 'object' && item !== null) {
+              const document = this.convertWZItemToDocument(
+                id,
+                value as WZDataItem,
+                `${fileName}/${key}`
+              );
+              documents.push(document);
+            }
+          }
+        }
+      } else {
+        for (const [id, item] of Object.entries(fileData[fileName])) {
+          if (typeof item === 'object' && item !== null) {
+            const document = this.convertWZItemToDocument(id, item as WZDataItem, fileName);
+            documents.push(document);
+          }
         }
       }
 
       if (documents.length > 0) {
         const result = await collection.insertMany(documents);
-        console.log(`${documents.length}개의 문서가 ${collectionName} 컬렉션에 삽입되었습니다.`);
+        console.log(
+          `${documents.length}/${Object.entries(fileData).length}개의 문서가 ${collectionName} 컬렉션에 삽입되었습니다.`
+        );
         console.log(`삽입된 문서 ID들: ${Object.keys(result.insertedIds).length}개`);
       } else {
         console.log('삽입할 문서가 없습니다.');
@@ -141,7 +138,7 @@ class WZToMongoConverter {
   async processAllJSONFiles(directoryPath: string): Promise<void> {
     try {
       const files = await fs.readdir(directoryPath);
-      const jsonFiles = files.filter(file => file.endsWith('.img.json'));
+      const jsonFiles = files.filter(file => file.endsWith('.target.json'));
 
       console.log(`총 ${jsonFiles.length}개의 JSON 파일을 찾았습니다.`);
 
@@ -189,62 +186,3 @@ class WZToMongoConverter {
     }
   }
 }
-
-// 메인 실행 함수
-async function main() {
-  const converter = new WZToMongoConverter();
-
-  try {
-    console.log('=== WZ to MongoDB 변환기 시작 ===');
-    console.log(`환경: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`JSON 디렉토리: ${process.env.JSON_DIRECTORY || './string.wz'}`);
-
-    // MongoDB 연결
-    await converter.connect();
-
-    // JSON 파일들이 있는 디렉토리 경로
-    const jsonDirectory = path.resolve(process.env.JSON_DIRECTORY || './string.wz');
-    console.log(`JSON 파일 경로: ${jsonDirectory}`);
-
-    // 디렉토리 존재 확인
-    if (!(await fs.pathExists(jsonDirectory))) {
-      throw new Error(`JSON 디렉토리를 찾을 수 없습니다: ${jsonDirectory}`);
-    }
-
-    // 모든 JSON 파일 처리
-    await converter.processAllJSONFiles(jsonDirectory);
-
-    // 통계 정보 출력
-    await converter.getCollectionStats();
-
-    // 예제 쿼리 실행
-    console.log('\n=== 예제 쿼리 실행 ===');
-
-    // Cash 컬렉션에서 이름에 "해님"이 포함된 항목 검색
-    const cashItems = await converter.findItemsByName('cash', '해님');
-    console.log('Cash 컬렉션에서 "해님" 검색 결과:', cashItems.length, '개');
-
-    if (cashItems.length > 0) {
-      console.log('첫 번째 결과:', {
-        id: cashItems[0].id,
-        name: cashItems[0].name,
-        description: `${cashItems[0].description?.substring(0, 50)}...`,
-      });
-    }
-
-    console.log('\n=== 변환 완료 ===');
-    console.log('MongoDB Express UI: http://localhost:8081 에서 데이터를 확인할 수 있습니다.');
-  } catch (error) {
-    console.error('실행 중 오류 발생:', error);
-    process.exit(1);
-  } finally {
-    await converter.disconnect();
-  }
-}
-
-// 프로그램 실행
-if (require.main === module) {
-  main().catch(console.error);
-}
-
-export { WZToMongoConverter, WZDataItem, MongoDocument };

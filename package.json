@@ -6,13 +6,14 @@
   "scripts": {
     "build": "tsc",
     "start": "npm run build && node dist/index.js",
-    "dev": "tsc && node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "unicode": "ts-node src/unicode-converter.ts",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
     "docker:logs": "docker-compose logs -f mongodb",
     "mongo:reset": "docker-compose down -v && docker-compose up -d",
-    "lint": "eslint . --ext .ts",
-    "lint:fix": "eslint . --ext .ts --fix",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "type-check": "tsc --noEmit",
@@ -22,7 +23,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "lint-staged": {
-    "*.{ts,js}": [
+    "src/**/*.{ts,js}": [
       "eslint --fix",
       "prettier --write"
     ],
@@ -53,6 +54,7 @@
     "husky": "^9.1.7",
     "lint-staged": "^16.1.5",
     "prettier": "^3.6.2",
+    "ts-node": "^10.9.2",
     "typescript": "^5.6.3"
   }
 }
