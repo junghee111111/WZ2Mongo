@@ -99,7 +99,7 @@ export class WZToMongoConverter {
       if (fileName === 'Eqp') {
         // 장비템은 다르게 설정
         for (const [id, item] of Object.entries(fileData[fileName])) {
-          for (const [key, value] of Object.entries(item)) {
+          for (const [key, value] of Object.entries(item as Record<string, unknown>)) {
             // 두번 루프 돌려야댐!!
             if (typeof item === 'object' && item !== null) {
               const document = this.convertWZItemToDocument(
@@ -111,8 +111,17 @@ export class WZToMongoConverter {
             }
           }
         }
-      } else {
+      } else if (fileName === 'Etc') {
+        // 기타 템은 또 WZ 구조가 다르다..
         for (const [id, item] of Object.entries(fileData[fileName])) {
+          if (typeof item === 'object' && item !== null) {
+            const document = this.convertWZItemToDocument(id, item as WZDataItem, fileName);
+            documents.push(document);
+          }
+        }
+      } else {
+        // 일반 아이템 처리
+        for (const [id, item] of Object.entries(fileData)) {
           if (typeof item === 'object' && item !== null) {
             const document = this.convertWZItemToDocument(id, item as WZDataItem, fileName);
             documents.push(document);
